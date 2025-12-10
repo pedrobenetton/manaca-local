@@ -1,0 +1,8 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=MyCrystApp
+Exec=/home/$USER/.manaca-local/run_prod.sh
+Icon=/home/$USER/.manaca-local/icon.png
+Terminal=false
+Categories=Science;
