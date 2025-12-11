@@ -9,6 +9,7 @@ cd ..
 
 echo "Copying React build to backend/static..."
 rm -rf backend/static
+mkdir -p backend/static
 cp -r frontend/build backend/static
 
 echo "Installing Python dependencies into venv..."
