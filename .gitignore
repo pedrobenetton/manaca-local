@@ -2,5 +2,7 @@ backend/static/
 frontend/build/
 frontend/node_modules/
 frontend/package-lock.json
-installer.run
 venv/
+MyCrystApp-1.0.AppImage
+MyCrystApp.AppDir
+appimagetool

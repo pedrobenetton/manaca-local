@@ -1,7 +1,7 @@
 import os
 from flask import Flask, send_from_directory, jsonify
 
-app = Flask(__name__, static_folder="static", static_url_path="")
+app = Flask(__name__, static_folder="static/build", static_url_path="")
 
 @app.route("/api/hello")
 def hello():

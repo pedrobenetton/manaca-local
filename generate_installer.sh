@@ -1,64 +1,102 @@
 #!/bin/bash
 set -e
 
-APP_NAME="MyCrystApp"
-ROOT_DIR="$(pwd)"
-INSTALLER="$ROOT_DIR/installer.run"
+APPNAME="MyCrystApp"
+VERSION="1.0"
+APPDIR="$APPNAME.AppDir"
 
-echo "Creating installer at: $INSTALLER"
+echo "=== Cleaning previous AppDir ==="
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR/usr/bin"
+mkdir -p "$APPDIR/usr/lib"
+mkdir -p "$APPDIR/usr/app"
 
-# -------------------------------
-# Create installer header
-# -------------------------------
-cat > "$INSTALLER" <<'EOF'
+echo "=== Copying icon ==="
+cp icon.png "$APPDIR/"
+
+echo "=== Copying backend, static, venv ==="
+cp -r backend "$APPDIR/usr/app/backend"
+cp -r venv "$APPDIR/usr/app/venv"
+
+echo "=== Copying React build to backend/static ==="
+rm -rf "$APPDIR/usr/app/backend/static/build"
+cp -r frontend/build "$APPDIR/usr/app/backend/static/build"
+
+echo "=== Bundling system python interpreter ==="
+PYBIN=$(which python3)
+PYDIR=$(dirname "$PYBIN")
+PYLIB=$(python3 - <<EOF
+import sys
+import os
+print(os.path.dirname(sys.executable))
+EOF
+)
+
+cp "$PYBIN" "$APPDIR/usr/bin/python3"
+
+echo "=== Copying Python stdlib ==="
+cp -r /usr/lib/python3.* "$APPDIR/usr/lib/" || true
+
+echo "=== Creating internal launcher (run_app.sh) ==="
+cat << 'EOF' > "$APPDIR/usr/app/run_app.sh"
 #!/bin/bash
-set -e
+HERE="$(dirname "$(readlink -f "$0")")"
 
-APP_NAME="MyCrystApp"
-INSTALL_DIR="$HOME/.manaca-local"
+export PATH="$HERE/venv/bin:$PATH"
+export PYTHONPATH="$HERE/backend:$PYTHONPATH"
+export MYAPP_DEV=""
 
-echo "Installing $APP_NAME to $INSTALL_DIR..."
+PORT=5000
+PID_IN_USE=$(lsof -t -i:$PORT)
 
-# Clean previous installation
-rm -rf "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR"
+if [ ! -z "$PID_IN_USE" ]; then
+    echo "Port $PORT is in use by PID $PID_IN_USE. Killing it..."
+    kill -9 $PID_IN_USE 2>/dev/null
+    sleep 0.5
+fi
 
-echo "Extracting files..."
-# Extract everything that comes after __ARCHIVE_BELOW__
-TAIL_LINE=$(awk '/^__ARCHIVE_BELOW__/ {print NR + 1; exit 0; }' "$0")
-tail -n +$TAIL_LINE "$0" | tar xz -C "$INSTALL_DIR"
+# Start Flask backend
+"$HERE/venv/bin/python3" "$HERE/backend/app.py" &
+PID=$!
 
-# Install desktop launcher
-echo "Installing desktop icon..."
-mkdir -p "$HOME/.local/share/applications"
-cp "$INSTALL_DIR/MyCrystApp.desktop" "$HOME/.local/share/applications/"
+sleep 1
+xdg-open http://127.0.0.1:5000
 
-echo "Installation complete!"
-echo "You can now launch $APP_NAME from your applications menu."
-
-exit 0
-
-__ARCHIVE_BELOW__
+wait $PID
 EOF
 
-# -------------------------------
-# Pack the application contents
-# -------------------------------
-echo "Packing files into installer..."
+chmod +x "$APPDIR/usr/app/run_app.sh"
 
-# We package the *contents* of manaca-local, not the folder itself
-cd "$ROOT_DIR"
+echo "=== Creating AppRun ==="
+cat << 'EOF' > "$APPDIR/AppRun"
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/app/run_app.sh"
+EOF
 
-tar czf - \
-    backend \
-    frontend \
-    venv \
-    run_prod.sh \
-    MyCrystApp.desktop \
-    icon.png \
-    >> "$INSTALLER"
+chmod +x "$APPDIR/AppRun"
 
-# Make installer executable
-chmod +x "$INSTALLER"
+echo "=== Creating .desktop file ==="
+cat << EOF > "$APPDIR/mycrystapp.desktop"
+[Desktop Entry]
+Name=My Crystallography App
+Exec=AppRun
+Icon=icon
+Type=Application
+Terminal=false
+Categories=Utility;
+EOF
 
-echo "Installer created successfully: $INSTALLER"
+echo "=== Building AppImage ==="
+if ! command -v appimagetool >/dev/null 2>&1; then
+    echo "appimagetool not found. Downloading..."
+    wget -O appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+    chmod +x appimagetool
+fi
+
+./appimagetool "$APPDIR" "${APPNAME}-${VERSION}.AppImage"
+
+echo "=== Done! ==="
+echo "Your AppImage is ready:"
+echo "  ${APPNAME}-${VERSION}.AppImage"
+
